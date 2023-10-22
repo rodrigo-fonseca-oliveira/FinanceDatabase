@@ -57,7 +57,7 @@ jobs:
             equities = pd.read_csv('database/equities.csv', index_col=0)
             ticker_dict = {}
 
-            # Loop over the exchange dataset and create a new object that will be added to the databae
+            # Loop over the exchange dataset and create a new object that will be added to the database
             for index, row in exchange_data.iterrows():
                 if row['marketCap']:
                     market_cap_value = float(row['marketCap'])
@@ -90,27 +90,17 @@ jobs:
                                 ticker_dict[index][column] = value
                     continue
                 except KeyError:
+                    if row['name'] == 'Nano Labs Ltd American Depositary Shares':
+                      # Specific case where the ticker is NA which is recognized
+                      # as a NaN instead meaning it will continuously be added
+                      index = "NA"
+
                     ticker_dict[index] = {}
 
                     ticker_dict[index]['name'] = row['name']
                     ticker_dict[index]['summary'] = np.nan
                     ticker_dict[index]['currency'] = "USD"
-                    
-                    try:
-                        ticker_dict[index]['sector'] = fd_sectors.loc[row['sector']][0]
-                    except KeyError:
-                        ticker_dict[index]['sector'] = np.nan
-                        
-                    try:
-                        industry_group = fd_industry_groups.loc[row['industry']].iloc[0]
-                        
-                        if isinstance(industry_group, pd.Series):
-                            industry_group = industry_group[0]
-                            
-                        ticker_dict[index]['industry_group'] = industry_group
-                    except KeyError:
-                        ticker_dict[index]['industry_group'] = np.nan
-                        
+
                     try:
                         industry = fd_industries.loc[row['industry']].iloc[0]
                         
@@ -120,7 +110,22 @@ jobs:
                         ticker_dict[index]['industry'] = industry
                     except KeyError:
                         ticker_dict[index]['industry'] = np.nan
+                        
+                    try:
+                        industry_divison = equities[equities['industry'] == ticker_dict[index]['industry']]
+                        industry_group = industry_divison['industry_group'].mode()[0]
+                            
+                        ticker_dict[index]['industry_group'] = industry_group
+                    except KeyError:
+                        ticker_dict[index]['industry_group'] = np.nan
                     
+                    try:
+                        sector_division = equities[(equities['industry_group'] == ticker_dict[index]['industry_group']) & (equities['industry'] == ticker_dict[index]['industry'])]
+                        sector = sector_division['sector'].mode()[0]
+
+                        ticker_dict[index]['sector'] = sector
+                    except Exception:
+                        ticker_dict[index]['sector'] = np.nan
                     
                     ticker_dict[index]['exchange'] = row['exchange']
                     ticker_dict[index]['market'] = row['market']  
@@ -136,7 +141,7 @@ jobs:
                     ticker_dict[index]['composite_figi'] = np.nan
                     ticker_dict[index]['shareclass_figi'] = np.nan
 
-            # Create a DataFrame out of the created dictionty
+            # Create a DataFrame out of the created dictionary
             updated_companies = pd.DataFrame.from_dict(ticker_dict, orient='index')
             updated_companies.index.name = 'symbol'
 
@@ -155,7 +160,6 @@ jobs:
                 
                 # Send to CSV
                 equities.to_csv('database/equities.csv')
-
       - name: Commit files and log
         run: |
           git config --global user.name 'GitHub Action'
